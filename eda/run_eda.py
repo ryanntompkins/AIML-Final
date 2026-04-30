@@ -13,37 +13,80 @@ plt.rcParams['figure.dpi'] = 120
 OUT = "eda_outputs"
 os.makedirs(OUT, exist_ok=True)
 
+# ── Readable column labels ─────────────────────────────────────────────────────────────
+COL_LABELS = {
+    'fire_size':    'Fire Size (acres)',
+    'fire_mag':     'Fire Magnitude',
+    'remoteness':   'Remoteness (dist. to city)',
+    'Temp_pre_30':  'Temperature 30 Days Prior (°C)',
+    'Temp_pre_15':  'Temperature 15 Days Prior (°C)',
+    'Temp_pre_7':   'Temperature 7 Days Prior (°C)',
+    'Temp_cont':    'Temperature at Containment (°C)',
+    'Wind_pre_30':  'Wind Speed 30 Days Prior (m/s)',
+    'Wind_pre_15':  'Wind Speed 15 Days Prior (m/s)',
+    'Wind_pre_7':   'Wind Speed 7 Days Prior (m/s)',
+    'Wind_cont':    'Wind Speed at Containment (m/s)',
+    'Hum_pre_30':   'Humidity 30 Days Prior (%)',
+    'Hum_pre_15':   'Humidity 15 Days Prior (%)',
+    'Hum_pre_7':    'Humidity 7 Days Prior (%)',
+    'Hum_cont':     'Humidity at Containment (%)',
+    'Prec_pre_30':  'Precipitation 30 Days Prior (mm)',
+    'Prec_pre_15':  'Precipitation 15 Days Prior (mm)',
+    'Prec_pre_7':   'Precipitation 7 Days Prior (mm)',
+    'Prec_cont':    'Precipitation at Containment (mm)',
+}
+
+def label(col):
+    return COL_LABELS.get(col, col)
+
+# ── Load ─────────────────────────────────────────────────────────────────────────────
 print("Loading dataset...")
 df = pd.read_csv("../us_wildfire_data.csv", low_memory=False)
-print(f"Shape: {df.shape}\n")
+print(f"Shape before cleaning: {df.shape}")
 
-# ── 2. Missing Values ──────────────────────────────────────────────────────────
+# ── Data Cleaning: replace -1 sentinel values with NaN ────────────────────────────
+weather_cols = [
+    'Temp_pre_30','Temp_pre_15','Temp_pre_7','Temp_cont',
+    'Wind_pre_30','Wind_pre_15','Wind_pre_7','Wind_cont',
+    'Hum_pre_30','Hum_pre_15','Hum_pre_7','Hum_cont',
+    'Prec_pre_30','Prec_pre_15','Prec_pre_7','Prec_cont',
+]
+
+print("\n=== Sentinel -1 counts BEFORE cleaning ===")
+for col in weather_cols:
+    n = (df[col] == -1).sum()
+    pct = n / len(df) * 100
+    if n > 0:
+        print(f"  {label(col):<40} {n:>6} rows ({pct:.1f}%)")
+
+df[weather_cols] = df[weather_cols].replace(-1, np.nan)
+print("\nAll -1 sentinel values replaced with NaN.")
+print(f"Shape after cleaning: {df.shape}\n")
+
+# ── 1. Missing Values (after cleaning) ────────────────────────────────────────────
 missing = df.isnull().sum()
 missing_pct = (missing / len(df) * 100).round(2)
 missing_df = pd.DataFrame({'missing_count': missing, 'missing_pct': missing_pct})
 missing_df = missing_df[missing_df.missing_count > 0].sort_values('missing_pct', ascending=False)
-print("=== Missing Values ===")
-print(missing_df.to_string())
+missing_df.index = [label(c) for c in missing_df.index]
 
-fig, ax = plt.subplots(figsize=(10, max(4, len(missing_df) * 0.4)))
+fig, ax = plt.subplots(figsize=(11, max(5, len(missing_df) * 0.42)))
 ax.barh(missing_df.index, missing_df.missing_pct, color='tomato')
 ax.set_xlabel('% Missing')
-ax.set_title('Missing Values by Column')
+ax.set_title('Missing Values by Column (after -1 sentinel removal)')
 ax.invert_yaxis()
 plt.tight_layout()
 plt.savefig(f"{OUT}/missing_values.png", dpi=150)
 plt.close()
 
-# ── 3. Spatial ─────────────────────────────────────────────────────────────────
+# ── 2. Spatial ─────────────────────────────────────────────────────────────────
 state_counts = df['state'].value_counts()
-print("\n=== Top 10 States ===")
-print(state_counts.head(10).to_string())
 
 fig, ax = plt.subplots(figsize=(14, 5))
 state_counts.plot(kind='bar', ax=ax, color='steelblue', edgecolor='white')
 ax.set_title('Number of Wildfires by State')
 ax.set_xlabel('State')
-ax.set_ylabel('Fire Count')
+ax.set_ylabel('Number of Fires')
 plt.xticks(rotation=45, ha='right')
 plt.tight_layout()
 plt.savefig(f"{OUT}/fires_by_state.png", dpi=150)
@@ -52,25 +95,25 @@ plt.close()
 fig, ax = plt.subplots(figsize=(14, 7))
 sc = ax.scatter(df['longitude'], df['latitude'],
                 c=np.log1p(df['fire_size']), cmap='YlOrRd', s=1, alpha=0.4)
-plt.colorbar(sc, ax=ax, label='log(fire_size + 1)')
+plt.colorbar(sc, ax=ax, label='log(Fire Size in acres + 1)')
 ax.set_xlim(-130, -60)
 ax.set_ylim(20, 55)
-ax.set_title('Wildfire Locations (coloured by log fire size)')
+ax.set_title('Wildfire Locations — Colour = log(Fire Size)')
 ax.set_xlabel('Longitude')
 ax.set_ylabel('Latitude')
 plt.tight_layout()
 plt.savefig(f"{OUT}/fire_map.png", dpi=150)
 plt.close()
 
-# ── 4. Temporal ────────────────────────────────────────────────────────────────
+# ── 3. Temporal ────────────────────────────────────────────────────────────────
 month_order = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 month_counts = df['discovery_month'].value_counts().reindex(month_order, fill_value=0)
 
 fig, ax = plt.subplots(figsize=(10, 4))
 month_counts.plot(kind='bar', ax=ax, color='darkorange', edgecolor='white')
-ax.set_title('Wildfire Discoveries by Month')
-ax.set_xlabel('Month')
-ax.set_ylabel('Fire Count')
+ax.set_title('Wildfire Discoveries by Month of Year')
+ax.set_xlabel('Month of Discovery')
+ax.set_ylabel('Number of Fires')
 plt.xticks(rotation=0)
 plt.tight_layout()
 plt.savefig(f"{OUT}/fires_by_month.png", dpi=150)
@@ -80,154 +123,139 @@ year_counts = df['disc_pre_year'].value_counts().sort_index()
 fig, ax = plt.subplots(figsize=(12, 4))
 ax.plot(year_counts.index, year_counts.values, marker='o', color='firebrick', linewidth=2)
 ax.fill_between(year_counts.index, year_counts.values, alpha=0.15, color='firebrick')
-ax.set_title('Wildfire Frequency Over the Years')
-ax.set_xlabel('Year')
+ax.set_title('Wildfire Frequency Over the Years (1991–2015)')
+ax.set_xlabel('Year of Discovery')
 ax.set_ylabel('Number of Fires')
 ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 plt.tight_layout()
 plt.savefig(f"{OUT}/fires_by_year.png", dpi=150)
 plt.close()
 
-# ── 5. Causes ──────────────────────────────────────────────────────────────────
+# ── 4. Causes ──────────────────────────────────────────────────────────────────
 cause_counts = df['stat_cause_descr'].value_counts()
-print("\n=== Fire Causes ===")
-print(cause_counts.to_string())
 
 fig, ax = plt.subplots(figsize=(10, 5))
 cause_counts.plot(kind='barh', ax=ax, color='mediumpurple', edgecolor='white')
 ax.set_title('Wildfire Causes')
-ax.set_xlabel('Count')
+ax.set_xlabel('Number of Fires')
+ax.set_ylabel('Cause of Fire')
 ax.invert_yaxis()
 plt.tight_layout()
 plt.savefig(f"{OUT}/fire_causes.png", dpi=150)
 plt.close()
 
-# ── 6. Fire Size & Class Imbalance ─────────────────────────────────────────────
+# ── 5. Fire Size & Class Imbalance ─────────────────────────────────────────────
 fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 axes[0].hist(df['fire_size'].dropna(), bins=80, color='darkorange', edgecolor='white', log=True)
-axes[0].set_title('Fire Size Distribution (log y-scale)')
+axes[0].set_title('Fire Size Distribution (log y-axis)')
 axes[0].set_xlabel('Fire Size (acres)')
-axes[0].set_ylabel('Count (log)')
+axes[0].set_ylabel('Number of Fires (log scale)')
 axes[1].hist(np.log1p(df['fire_size'].dropna()), bins=60, color='steelblue', edgecolor='white')
-axes[1].set_title('log(fire_size + 1) Distribution')
-axes[1].set_xlabel('log(fire_size + 1)')
-axes[1].set_ylabel('Count')
+axes[1].set_title('log(Fire Size + 1) Distribution')
+axes[1].set_xlabel('log(Fire Size in acres + 1)')
+axes[1].set_ylabel('Number of Fires')
+plt.suptitle('Fire Size — Raw vs Log-Transformed', fontsize=12)
 plt.tight_layout()
 plt.savefig(f"{OUT}/fire_size_dist.png", dpi=150)
 plt.close()
 
+class_labels = {
+    'A': 'A (< 0.25 ac)', 'B': 'B (0.25–10 ac)', 'C': 'C (10–100 ac)',
+    'D': 'D (100–300 ac)', 'E': 'E (300–1k ac)', 'F': 'F (1k–5k ac)', 'G': 'G (> 5k ac)'
+}
 class_counts = df['fire_size_class'].value_counts().sort_index()
 class_pct = (class_counts / class_counts.sum() * 100).round(2)
-print("\n=== Fire Size Class Distribution ===")
-for cls, cnt, pct in zip(class_counts.index, class_counts.values, class_pct.values):
-    print(f"  Class {cls}: {cnt:>6} fires  ({pct:.1f}%)")
+readable_labels = [class_labels.get(c, c) for c in class_counts.index]
 
-fig, ax = plt.subplots(figsize=(8, 4))
-bars = ax.bar(class_counts.index, class_counts.values, color='coral', edgecolor='white')
-ax.set_title('Fire Size Class Distribution (A = smallest, G = largest)')
+fig, ax = plt.subplots(figsize=(10, 4))
+bars = ax.bar(readable_labels, class_counts.values, color='coral', edgecolor='white')
+ax.set_title('Fire Size Class Distribution')
 ax.set_xlabel('Fire Size Class')
-ax.set_ylabel('Count')
+ax.set_ylabel('Number of Fires')
 for bar, pct in zip(bars, class_pct.values):
     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 100,
             f'{pct:.1f}%', ha='center', va='bottom', fontsize=9)
+plt.xticks(rotation=15, ha='right')
 plt.tight_layout()
 plt.savefig(f"{OUT}/class_imbalance.png", dpi=150)
 plt.close()
 
-# ── 7. Correlations ────────────────────────────────────────────────────────────
-weather_cols = [
-    'Temp_pre_30','Temp_pre_15','Temp_pre_7','Temp_cont',
-    'Wind_pre_30','Wind_pre_15','Wind_pre_7','Wind_cont',
-    'Hum_pre_30','Hum_pre_15','Hum_pre_7','Hum_cont',
-    'Prec_pre_30','Prec_pre_15','Prec_pre_7','Prec_cont',
-    'fire_size', 'fire_mag', 'remoteness'
-]
-corr_df = df[weather_cols].corr()
+# ── 6. Correlations ────────────────────────────────────────────────────────────
+corr_cols = weather_cols + ['fire_size', 'fire_mag', 'remoteness']
+corr_df = df[corr_cols].corr()
+corr_df_display = corr_df.copy()
+corr_df_display.index = [label(c) for c in corr_df_display.index]
+corr_df_display.columns = [label(c) for c in corr_df_display.columns]
 
-fig, ax = plt.subplots(figsize=(14, 10))
-mask = np.zeros_like(corr_df, dtype=bool)
+fig, ax = plt.subplots(figsize=(16, 12))
+mask = np.zeros_like(corr_df_display, dtype=bool)
 mask[np.triu_indices_from(mask)] = True
-sns.heatmap(corr_df, mask=mask, annot=True, fmt='.2f', cmap='coolwarm',
-            center=0, ax=ax, linewidths=0.5, annot_kws={'size': 7})
-ax.set_title('Correlation Matrix - Weather Features & Fire Size')
+sns.heatmap(corr_df_display, mask=mask, annot=True, fmt='.2f', cmap='coolwarm',
+            center=0, ax=ax, linewidths=0.5, annot_kws={'size': 6})
+ax.set_title('Correlation Matrix — Weather Features & Fire Size (cleaned data)', fontsize=12)
+plt.xticks(rotation=45, ha='right', fontsize=7)
+plt.yticks(fontsize=7)
 plt.tight_layout()
 plt.savefig(f"{OUT}/correlation_heatmap.png", dpi=150)
 plt.close()
 
 top_corr = corr_df['fire_size'].drop('fire_size').abs().sort_values(ascending=False).head(4).index.tolist()
-print(f"\nTop 4 features correlated with fire_size: {top_corr}")
 
 fig, axes = plt.subplots(1, 4, figsize=(18, 4))
 for ax, feat in zip(axes, top_corr):
     sample = df[[feat, 'fire_size']].dropna().sample(min(3000, len(df)), random_state=42)
     ax.scatter(sample[feat], np.log1p(sample['fire_size']), alpha=0.2, s=5, color='steelblue')
-    ax.set_xlabel(feat)
-    ax.set_ylabel('log(fire_size + 1)')
-    ax.set_title(f'{feat} vs fire_size')
-plt.suptitle('Top Weather Features vs log(Fire Size)', y=1.01)
+    ax.set_xlabel(label(feat), fontsize=8)
+    ax.set_ylabel('log(Fire Size + 1)')
+    ax.set_title(label(feat), fontsize=8)
+plt.suptitle('Top Weather Features vs log(Fire Size) — after cleaning', y=1.02, fontsize=11)
 plt.tight_layout()
 plt.savefig(f"{OUT}/scatter_top_features.png", dpi=150)
 plt.close()
 
-# ── 8. Vegetation ──────────────────────────────────────────────────────────────
+# ── 7. Vegetation ──────────────────────────────────────────────────────────────
 veg_labels = {
-    1:'Trop.Evgr.Broadleaf', 2:'Trop.Decid.Broadleaf', 3:'Temp.Evgr.Broadleaf',
-    4:'Temp.Evgr.Needleleaf', 5:'Temp.Decid.Broadleaf', 6:'Bor.Evgr.Needleleaf',
-    7:'Bor.Decid.Needleleaf', 8:'Savanna', 9:'C3 Grassland', 10:'C4 Grassland',
+    1:'Tropical Evergreen Broadleaf Forest', 2:'Tropical Deciduous Broadleaf Forest',
+    3:'Temperate Evergreen Broadleaf Forest', 4:'Temperate Evergreen Needleleaf Forest',
+    5:'Temperate Deciduous Broadleaf Forest', 6:'Boreal Evergreen Needleleaf Forest',
+    7:'Boreal Deciduous Needleleaf Forest', 8:'Savanna',
+    9:'C3 Grassland / Steppe', 10:'C4 Grassland / Steppe',
     11:'Dense Shrubland', 12:'Open Shrubland', 13:'Tundra', 14:'Desert',
-    15:'Polar/Rock/Ice', 16:'Sec.Trop.Evgr', 17:'Sec.Trop.Decid',
-    18:'Sec.Temp.Evgr.BL', 19:'Sec.Temp.Evgr.NL', 20:'Sec.Temp.Decid',
-    21:'Sec.Bor.Evgr.NL', 22:'Sec.Bor.Decid.NL', 23:'Water',
-    24:'C3 Cropland', 25:'C4 Cropland', 26:'C3 Pasture', 27:'C4 Pasture', 28:'Urban'
+    15:'Polar Desert / Rock / Ice', 16:'Sec. Tropical Evergreen Broadleaf',
+    17:'Sec. Tropical Deciduous Broadleaf', 18:'Sec. Temperate Evergreen Broadleaf',
+    19:'Sec. Temperate Evergreen Needleleaf', 20:'Sec. Temperate Deciduous Broadleaf',
+    21:'Sec. Boreal Evergreen Needleleaf', 22:'Sec. Boreal Deciduous Needleleaf',
+    23:'Water / Rivers', 24:'C3 Cropland', 25:'C4 Cropland',
+    26:'C3 Pastureland', 27:'C4 Pastureland', 28:'Urban Land'
 }
 veg_counts = df['Vegetation'].value_counts().sort_index()
-veg_counts.index = veg_counts.index.map(lambda x: veg_labels.get(int(x), str(x)) if pd.notna(x) else 'Unknown')
+veg_counts.index = veg_counts.index.map(lambda x: veg_labels.get(int(x), f'Type {int(x)}') if pd.notna(x) else 'Unknown')
 
-fig, ax = plt.subplots(figsize=(12, 5))
+fig, ax = plt.subplots(figsize=(13, 6))
 veg_counts.sort_values(ascending=True).plot(kind='barh', ax=ax, color='forestgreen', edgecolor='white')
-ax.set_title('Fires by Dominant Vegetation Type')
-ax.set_xlabel('Fire Count')
+ax.set_title('Number of Fires by Dominant Vegetation Type')
+ax.set_xlabel('Number of Fires')
+ax.set_ylabel('Vegetation Type')
 plt.tight_layout()
 plt.savefig(f"{OUT}/fires_by_vegetation.png", dpi=150)
 plt.close()
 
-# ── 9. Outliers ────────────────────────────────────────────────────────────────
+# ── 8. Outliers ────────────────────────────────────────────────────────────────
 outlier_cols = ['fire_size', 'Temp_pre_7', 'Wind_pre_7', 'Hum_pre_7', 'Prec_pre_7']
+outlier_labels = [label(c) for c in outlier_cols]
 
 fig, axes = plt.subplots(1, len(outlier_cols), figsize=(18, 5))
-for ax, col in zip(axes, outlier_cols):
+for ax, col, lbl in zip(axes, outlier_cols, outlier_labels):
     data = df[col].dropna()
     ax.boxplot(data, vert=True, patch_artist=True,
                boxprops=dict(facecolor='lightblue', color='navy'),
                medianprops=dict(color='red', linewidth=2),
                flierprops=dict(marker='o', markersize=2, alpha=0.3, color='grey'))
-    ax.set_title(col, fontsize=9)
+    ax.set_title(lbl, fontsize=8)
     ax.set_xticks([])
-plt.suptitle('Outlier Detection - Box Plots', fontsize=12)
+plt.suptitle('Outlier Detection — Box Plots (cleaned data)', fontsize=12)
 plt.tight_layout()
 plt.savefig(f"{OUT}/outliers_boxplots.png", dpi=150)
 plt.close()
-
-print("\n=== Outlier Summary (IQR method) ===")
-for col in outlier_cols:
-    data = df[col].dropna()
-    Q1, Q3 = data.quantile(0.25), data.quantile(0.75)
-    IQR = Q3 - Q1
-    n = ((data < Q1 - 1.5*IQR) | (data > Q3 + 1.5*IQR)).sum()
-    print(f"  {col:<20} outliers: {n:>5} ({n/len(data)*100:.1f}%)  max={data.max():.1f}  median={data.median():.1f}")
-
-# ── 10. Summary ────────────────────────────────────────────────────────────────
-print("\n========== EDA SUMMARY ==========")
-print(f"Total records   : {len(df):,}")
-print(f"Total features  : {df.shape[1]}")
-print(f"Years covered   : {df['disc_pre_year'].min():.0f} - {df['disc_pre_year'].max():.0f}")
-print(f"States          : {df['state'].nunique()}")
-print(f"Top state       : {df['state'].value_counts().idxmax()}")
-print(f"Peak month      : {df['discovery_month'].value_counts().idxmax()}")
-print(f"Most common cause: {df['stat_cause_descr'].value_counts().idxmax()}")
-print(f"Fire size -- mean={df['fire_size'].mean():.1f}  median={df['fire_size'].median():.1f}  max={df['fire_size'].max():.0f} acres")
-print("\nClass imbalance:")
-for cls, pct in (df['fire_size_class'].value_counts(normalize=True)*100).sort_index().items():
-    print(f"  {cls}: {pct:.1f}%")
 
 print(f"\nAll plots saved to: {OUT}/")
