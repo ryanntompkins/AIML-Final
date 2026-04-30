@@ -4,13 +4,16 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import pathlib
 import seaborn as sns
 import os
+
+BASE_DIR = pathlib.Path(__file__).parent.resolve()
 
 sns.set_theme(style='whitegrid', palette='muted')
 plt.rcParams['figure.dpi'] = 120
 
-OUT = "eda_outputs"
+OUT = BASE_DIR / "eda_outputs"
 os.makedirs(OUT, exist_ok=True)
 
 # ── Readable column labels ─────────────────────────────────────────────────────────────
@@ -41,7 +44,7 @@ def label(col):
 
 # ── Load ─────────────────────────────────────────────────────────────────────────────
 print("Loading dataset...")
-df = pd.read_csv("../us_wildfire_data.csv", low_memory=False)
+df = pd.read_csv(BASE_DIR / "us_wildfire_data.csv", low_memory=False)
 print(f"Shape before cleaning: {df.shape}")
 
 # ── Data Cleaning: replace -1 sentinel values with NaN ────────────────────────────
@@ -76,7 +79,7 @@ ax.set_xlabel('% Missing')
 ax.set_title('Missing Values by Column (after -1 sentinel removal)')
 ax.invert_yaxis()
 plt.tight_layout()
-plt.savefig(f"{OUT}/missing_values.png", dpi=150)
+plt.savefig(OUT / "missing_values.png", dpi=150)
 plt.close()
 
 # ── 2. Spatial ─────────────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ ax.set_xlabel('State')
 ax.set_ylabel('Number of Fires')
 plt.xticks(rotation=45, ha='right')
 plt.tight_layout()
-plt.savefig(f"{OUT}/fires_by_state.png", dpi=150)
+plt.savefig(OUT / "fires_by_state.png", dpi=150)
 plt.close()
 
 fig, ax = plt.subplots(figsize=(14, 7))
@@ -102,7 +105,7 @@ ax.set_title('Wildfire Locations — Colour = log(Fire Size)')
 ax.set_xlabel('Longitude')
 ax.set_ylabel('Latitude')
 plt.tight_layout()
-plt.savefig(f"{OUT}/fire_map.png", dpi=150)
+plt.savefig(OUT / "fire_map.png", dpi=150)
 plt.close()
 
 # ── 3. Temporal ────────────────────────────────────────────────────────────────
@@ -116,7 +119,7 @@ ax.set_xlabel('Month of Discovery')
 ax.set_ylabel('Number of Fires')
 plt.xticks(rotation=0)
 plt.tight_layout()
-plt.savefig(f"{OUT}/fires_by_month.png", dpi=150)
+plt.savefig(OUT / "fires_by_month.png", dpi=150)
 plt.close()
 
 year_counts = df['disc_pre_year'].value_counts().sort_index()
@@ -128,7 +131,7 @@ ax.set_xlabel('Year of Discovery')
 ax.set_ylabel('Number of Fires')
 ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 plt.tight_layout()
-plt.savefig(f"{OUT}/fires_by_year.png", dpi=150)
+plt.savefig(OUT / "fires_by_year.png", dpi=150)
 plt.close()
 
 # ── 4. Causes ──────────────────────────────────────────────────────────────────
@@ -141,7 +144,7 @@ ax.set_xlabel('Number of Fires')
 ax.set_ylabel('Cause of Fire')
 ax.invert_yaxis()
 plt.tight_layout()
-plt.savefig(f"{OUT}/fire_causes.png", dpi=150)
+plt.savefig(OUT / "fire_causes.png", dpi=150)
 plt.close()
 
 # ── 5. Fire Size & Class Imbalance ─────────────────────────────────────────────
@@ -156,7 +159,7 @@ axes[1].set_xlabel('log(Fire Size in acres + 1)')
 axes[1].set_ylabel('Number of Fires')
 plt.suptitle('Fire Size — Raw vs Log-Transformed', fontsize=12)
 plt.tight_layout()
-plt.savefig(f"{OUT}/fire_size_dist.png", dpi=150)
+plt.savefig(OUT / "fire_size_dist.png", dpi=150)
 plt.close()
 
 class_labels = {
@@ -177,7 +180,7 @@ for bar, pct in zip(bars, class_pct.values):
             f'{pct:.1f}%', ha='center', va='bottom', fontsize=9)
 plt.xticks(rotation=15, ha='right')
 plt.tight_layout()
-plt.savefig(f"{OUT}/class_imbalance.png", dpi=150)
+plt.savefig(OUT / "class_imbalance.png", dpi=150)
 plt.close()
 
 # ── 6. Correlations ────────────────────────────────────────────────────────────
@@ -196,7 +199,7 @@ ax.set_title('Correlation Matrix — Weather Features & Fire Size (cleaned data)
 plt.xticks(rotation=45, ha='right', fontsize=7)
 plt.yticks(fontsize=7)
 plt.tight_layout()
-plt.savefig(f"{OUT}/correlation_heatmap.png", dpi=150)
+plt.savefig(OUT / "correlation_heatmap.png", dpi=150)
 plt.close()
 
 top_corr = corr_df['fire_size'].drop('fire_size').abs().sort_values(ascending=False).head(4).index.tolist()
@@ -210,7 +213,7 @@ for ax, feat in zip(axes, top_corr):
     ax.set_title(label(feat), fontsize=8)
 plt.suptitle('Top Weather Features vs log(Fire Size) — after cleaning', y=1.02, fontsize=11)
 plt.tight_layout()
-plt.savefig(f"{OUT}/scatter_top_features.png", dpi=150)
+plt.savefig(OUT / "scatter_top_features.png", dpi=150)
 plt.close()
 
 # ── 7. Vegetation ──────────────────────────────────────────────────────────────
@@ -237,7 +240,7 @@ ax.set_title('Number of Fires by Dominant Vegetation Type')
 ax.set_xlabel('Number of Fires')
 ax.set_ylabel('Vegetation Type')
 plt.tight_layout()
-plt.savefig(f"{OUT}/fires_by_vegetation.png", dpi=150)
+plt.savefig(OUT / "fires_by_vegetation.png", dpi=150)
 plt.close()
 
 # ── 8. Outliers ────────────────────────────────────────────────────────────────
@@ -255,7 +258,7 @@ for ax, col, lbl in zip(axes, outlier_cols, outlier_labels):
     ax.set_xticks([])
 plt.suptitle('Outlier Detection — Box Plots (cleaned data)', fontsize=12)
 plt.tight_layout()
-plt.savefig(f"{OUT}/outliers_boxplots.png", dpi=150)
+plt.savefig(OUT / "outliers_boxplots.png", dpi=150)
 plt.close()
 
 print(f"\nAll plots saved to: {OUT}/")
